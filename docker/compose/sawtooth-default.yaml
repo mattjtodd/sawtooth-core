@@ -13,78 +13,73 @@
 # limitations under the License.
 # ------------------------------------------------------------------------------
 
-version: "2.1"
+version: "3.7"
+
+volumes:
+  validator:
 
 services:
 
   settings-tp:
     image: hyperledger/sawtooth-settings-tp:1.1
-    container_name: sawtooth-settings-tp-default
-    depends_on:
-      - validator
-    entrypoint: settings-tp -vv -C tcp://validator:4004
+    restart: always
+    command: settings-tp -vvv -C tcp://validator:4004
+    stop_signal: SIGKILL
 
   intkey-tp-python:
     image: hyperledger/sawtooth-intkey-tp-python:1.1
-    container_name: sawtooth-intkey-tp-python-default
-    depends_on:
-      - validator
-    entrypoint: intkey-tp-python -vv -C tcp://validator:4004
+    restart: always
+    command: intkey-tp-python -vvv -C tcp://validator:4004
+    stop_signal: SIGKILL
 
   xo-tp-python:
     image: hyperledger/sawtooth-xo-tp-python:1.1
-    container_name: sawtooth-xo-tp-python-default
-    depends_on:
-      - validator
-    entrypoint: xo-tp-python -vv -C tcp://validator:4004
+    restart: always
+    command: xo-tp-python -vvv -C tcp://validator:4004
+    stop_signal: SIGKILL
 
   validator:
     image: hyperledger/sawtooth-validator:1.1
-    container_name: sawtooth-validator-default
-    expose:
-      - 4004
+    restart: always
     ports:
       - "4004:4004"
-    # start the validator with an empty genesis batch
-    entrypoint: "bash -c \"\
-        sawadm keygen && \
-        sawtooth keygen my_key && \
-        sawset genesis -k /root/.sawtooth/keys/my_key.priv && \
-        sawset proposal create \
-          -k /root/.sawtooth/keys/my_key.priv \
-          sawtooth.consensus.algorithm.name=Devmode \
-          sawtooth.consensus.algorithm.version=0.1 \
-          -o config.batch && \
-        sawadm genesis config-genesis.batch config.batch && \
-        sawtooth-validator -vv \
-          --endpoint tcp://validator:8800 \
-          --bind component:tcp://eth0:4004 \
-          --bind network:tcp://eth0:8800 \
-          --bind consensus:tcp://eth0:5050 \
-        \""
+    volumes:
+      - validator:/var/lib/sawtooth/
+    command:
+      - /bin/sh
+      - -c
+      - |
+        sawadm keygen &&
+        sawtooth keygen my_key &&
+        sawset genesis -k /root/.sawtooth/keys/my_key.priv &&
+        sawadm genesis config-genesis.batch &&
+        sawtooth-validator -vvv \
+          --endpoint validator:8800 \
+          --bind component:0.0.0.0:4004 \
+          --bind network:0.0.0.0:8800 \
+          --bind consensus:0.0.0.0:5050
+    stop_signal: SIGKILL
 
   devmode-engine:
     image: hyperledger/sawtooth-devmode-engine-rust:1.1
-    container_name: sawtooth-devmode-engine-rust-default
-    depends_on:
-      - validator
-    entrypoint: devmode-engine-rust -C tcp://validator:5050
+    restart: always
+    command: devmode-engine-rust -vv -C tcp://validator:5050
+    stop_signal: SIGKILL
 
   rest-api:
     image: hyperledger/sawtooth-rest-api:1.1
-    container_name: sawtooth-rest-api-default
     ports:
       - "8008:8008"
-    depends_on:
-      - validator
-    entrypoint: sawtooth-rest-api -C tcp://validator:4004 --bind rest-api:8008
+    command: sawtooth-rest-api -vvv -C tcp://validator:4004 --bind 0.0.0.0:8008
+    stop_signal: SIGKILL
 
   shell:
     image: hyperledger/sawtooth-all:1.1
-    container_name: sawtooth-shell-default
-    depends_on:
-      - rest-api
-    entrypoint: "bash -c \"\
-        sawtooth keygen && \
-        tail -f /dev/null \
-        \""
+    restart: always
+    command:
+      - /bin/sh
+      - -c
+      - |
+        sawtooth keygen &&
+        tail -f /dev/null
+    stop_signal: SIGKILL
